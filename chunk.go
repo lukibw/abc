@@ -10,14 +10,29 @@ type OpCode byte
 const (
 	OpReturn OpCode = iota
 	OpConstant
+	OpNegate
+	OpAdd
+	OpSubtract
+	OpMultiply
+	OpDivide
 )
 
 func (c OpCode) String() string {
 	switch c {
 	case OpReturn:
-		return "OP_RETURN"
+		return "return"
 	case OpConstant:
-		return "OP_CONSTANT"
+		return "constant"
+	case OpNegate:
+		return "negate"
+	case OpAdd:
+		return "add"
+	case OpSubtract:
+		return "subtract"
+	case OpMultiply:
+		return "multiply"
+	case OpDivide:
+		return "divide"
 	default:
 		return ""
 	}
@@ -25,12 +40,10 @@ func (c OpCode) String() string {
 
 func (c OpCode) Offset() int {
 	switch c {
-	case OpReturn:
-		return 1
 	case OpConstant:
 		return 2
 	default:
-		return 0
+		return 1
 	}
 }
 
@@ -66,11 +79,11 @@ func (c *Chunk) String() string {
 		}
 		instruction := OpCode(c.code[i])
 		switch instruction {
-		case OpReturn:
-			sb.WriteString(fmt.Sprintf("%s\n", instruction))
 		case OpConstant:
 			constant := c.code[i+1]
 			sb.WriteString(fmt.Sprintf("%-16s %4d '%g'\n", instruction, constant, c.constants[constant]))
+		default:
+			sb.WriteString(fmt.Sprintf("%s\n", instruction))
 		}
 		i += instruction.Offset()
 	}
