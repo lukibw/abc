@@ -113,12 +113,16 @@ func newScanner(source []rune) *scanner {
 	return &scanner{source, 0, 0, 1}
 }
 
-func (s *scanner) newToken(kind tokenKind) token {
-	return token{kind, s.start, s.current - s.start, s.line}
+func (s *scanner) newToken(kind tokenKind) *token {
+	return &token{kind, s.start, s.current - s.start, s.line}
 }
 
 func (s *scanner) newError(kind scannerErrorKind) error {
 	return &scannerError{kind, s.line}
+}
+
+func (s *scanner) lexeme(t *token) string {
+	return string(s.source[t.start : t.start+t.length])
 }
 
 func (s *scanner) isAtEnd() bool {
@@ -171,7 +175,7 @@ func (s *scanner) skipWhitespace() {
 	}
 }
 
-func (s *scanner) string() (token, error) {
+func (s *scanner) string() (*token, error) {
 	for s.peek() != '"' && !s.isAtEnd() {
 		if s.peek() != '\n' {
 			s.line++
@@ -179,13 +183,13 @@ func (s *scanner) string() (token, error) {
 		s.advance()
 	}
 	if s.isAtEnd() {
-		return token{}, s.newError(errUnterminatedString)
+		return nil, s.newError(errUnterminatedString)
 	}
 	s.advance()
 	return s.newToken(tokenString), nil
 }
 
-func (s *scanner) number() (token, error) {
+func (s *scanner) number() (*token, error) {
 	for isDigit(s.peek()) {
 		s.advance()
 	}
@@ -198,7 +202,7 @@ func (s *scanner) number() (token, error) {
 	return s.newToken(tokenNumber), nil
 }
 
-func (s *scanner) identifier() (token, error) {
+func (s *scanner) identifier() (*token, error) {
 	for isAlpha(s.peek()) || isDigit(s.peek()) {
 		s.advance()
 	}
@@ -208,7 +212,7 @@ func (s *scanner) identifier() (token, error) {
 	return s.newToken(tokenIdentifier), nil
 }
 
-func (s *scanner) token() (token, error) {
+func (s *scanner) token() (*token, error) {
 	s.skipWhitespace()
 	s.start = s.current
 	if s.isAtEnd() {
@@ -271,6 +275,6 @@ func (s *scanner) token() (token, error) {
 	case '"':
 		return s.string()
 	default:
-		return token{}, s.newError(errUnexpectedCharacter)
+		return nil, s.newError(errUnexpectedCharacter)
 	}
 }
