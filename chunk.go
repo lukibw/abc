@@ -15,6 +15,13 @@ const (
 	OpSubtract
 	OpMultiply
 	OpDivide
+	OpNil
+	OpFalse
+	OpTrue
+	OpNot
+	OpEqual
+	OpGreater
+	OpLess
 )
 
 func (c OpCode) String() string {
@@ -33,6 +40,20 @@ func (c OpCode) String() string {
 		return "multiply"
 	case OpDivide:
 		return "divide"
+	case OpNil:
+		return "nil"
+	case OpFalse:
+		return "false"
+	case OpTrue:
+		return "true"
+	case OpNot:
+		return "not"
+	case OpEqual:
+		return "equal"
+	case OpGreater:
+		return "greater"
+	case OpLess:
+		return "less"
 	default:
 		return ""
 	}
@@ -62,8 +83,8 @@ func (c *Chunk) Write(value byte, line int) {
 	c.lines = append(c.lines, line)
 }
 
-func (c *Chunk) AddConstant(value float64) byte {
-	c.constants = append(c.constants, value)
+func (c *Chunk) AddConstant(f float64) byte {
+	c.constants = append(c.constants, f)
 	return byte(len(c.constants) - 1)
 }
 

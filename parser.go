@@ -31,6 +31,7 @@ const (
 	parseFunctionBinary
 	parseFunctionUnary
 	parseFunctionGrouping
+	parseFunctionLiteral
 )
 
 type parseRule struct {
@@ -51,31 +52,31 @@ var parseRules = map[tokenKind]parseRule{
 	tokenSemicolon:    {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenSlash:        {parseFunctionNone, parseFunctionBinary, precedenceFactor},
 	tokenStar:         {parseFunctionNone, parseFunctionBinary, precedenceFactor},
-	tokenBang:         {parseFunctionNone, parseFunctionNone, precedenceNone},
-	tokenBangEqual:    {parseFunctionNone, parseFunctionNone, precedenceNone},
+	tokenBang:         {parseFunctionUnary, parseFunctionNone, precedenceNone},
+	tokenBangEqual:    {parseFunctionNone, parseFunctionBinary, precedenceEquality},
 	tokenEqual:        {parseFunctionNone, parseFunctionNone, precedenceNone},
-	tokenEqualEqual:   {parseFunctionNone, parseFunctionNone, precedenceNone},
-	tokenGreater:      {parseFunctionNone, parseFunctionNone, precedenceNone},
-	tokenGreaterEqual: {parseFunctionNone, parseFunctionNone, precedenceNone},
-	tokenLess:         {parseFunctionNone, parseFunctionNone, precedenceNone},
-	tokenLessEqual:    {parseFunctionNone, parseFunctionNone, precedenceNone},
+	tokenEqualEqual:   {parseFunctionNone, parseFunctionBinary, precedenceEquality},
+	tokenGreater:      {parseFunctionNone, parseFunctionBinary, precedenceComparison},
+	tokenGreaterEqual: {parseFunctionNone, parseFunctionBinary, precedenceComparison},
+	tokenLess:         {parseFunctionNone, parseFunctionBinary, precedenceComparison},
+	tokenLessEqual:    {parseFunctionNone, parseFunctionBinary, precedenceComparison},
 	tokenIdentifier:   {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenString:       {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenNumber:       {parseFunctionNumber, parseFunctionNone, precedenceNone},
 	tokenAnd:          {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenClass:        {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenElse:         {parseFunctionNone, parseFunctionNone, precedenceNone},
-	tokenFalse:        {parseFunctionNone, parseFunctionNone, precedenceNone},
+	tokenFalse:        {parseFunctionLiteral, parseFunctionNone, precedenceNone},
 	tokenFor:          {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenFun:          {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenIf:           {parseFunctionNone, parseFunctionNone, precedenceNone},
-	tokenNil:          {parseFunctionNone, parseFunctionNone, precedenceNone},
+	tokenNil:          {parseFunctionLiteral, parseFunctionNone, precedenceNone},
 	tokenOr:           {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenPrint:        {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenReturn:       {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenSuper:        {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenThis:         {parseFunctionNone, parseFunctionNone, precedenceNone},
-	tokenTrue:         {parseFunctionNone, parseFunctionNone, precedenceNone},
+	tokenTrue:         {parseFunctionLiteral, parseFunctionNone, precedenceNone},
 	tokenVar:          {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenWhile:        {parseFunctionNone, parseFunctionNone, precedenceNone},
 	tokenEof:          {parseFunctionNone, parseFunctionNone, precedenceNone},
@@ -149,8 +150,8 @@ func (p *parser) consume(t tokenKind, e parserErrorKind) error {
 	return &parserError{e, p.current}
 }
 
-func (p *parser) makeConstant(value float64) (byte, error) {
-	constant := p.chunk.AddConstant(value)
+func (p *parser) makeConstant(f float64) (byte, error) {
+	constant := p.chunk.AddConstant(f)
 	if constant > math.MaxUint8 {
 		return 0, p.newError(errTooManyConstants)
 	}
@@ -175,8 +176,8 @@ func (p *parser) endCompiler() {
 	fmt.Println(p.chunk)
 }
 
-func (p *parser) emitConstant(value float64) error {
-	constant, err := p.makeConstant(value)
+func (p *parser) emitConstant(f float64) error {
+	constant, err := p.makeConstant(f)
 	if err != nil {
 		return err
 	}
@@ -185,7 +186,6 @@ func (p *parser) emitConstant(value float64) error {
 }
 
 func (p *parser) binary() error {
-
 	switch p.previous.kind {
 	case tokenPlus:
 		p.emitByte(byte(OpAdd))
@@ -195,16 +195,40 @@ func (p *parser) binary() error {
 		p.emitByte(byte(OpMultiply))
 	case tokenSlash:
 		p.emitByte(byte(OpDivide))
+	case tokenBangEqual:
+		p.emitBytes(byte(OpEqual), byte(OpNot))
+	case tokenEqualEqual:
+		p.emitByte(byte(OpEqual))
+	case tokenGreater:
+		p.emitByte(byte(OpGreater))
+	case tokenGreaterEqual:
+		p.emitBytes(byte(OpLess), byte(OpNot))
+	case tokenLess:
+		p.emitByte(byte(OpLess))
+	case tokenLessEqual:
+		p.emitBytes(byte(OpGreater), byte(OpNot))
+	}
+	return nil
+}
+
+func (p *parser) literal() error {
+	switch p.previous.kind {
+	case tokenNil:
+		p.emitByte(byte(OpNil))
+	case tokenFalse:
+		p.emitByte(byte(OpFalse))
+	case tokenTrue:
+		p.emitByte(byte(OpTrue))
 	}
 	return nil
 }
 
 func (p *parser) number() error {
-	value, err := strconv.ParseFloat(p.scanner.lexeme(p.previous), 64)
+	f, err := strconv.ParseFloat(p.scanner.lexeme(p.previous), 64)
 	if err != nil {
 		panic("parser: cannot parse float from token lexeme")
 	}
-	return p.emitConstant(value)
+	return p.emitConstant(f)
 }
 
 func (p *parser) parseFunction(f parseFunction) error {
@@ -217,6 +241,8 @@ func (p *parser) parseFunction(f parseFunction) error {
 		return p.unary()
 	case parseFunctionNumber:
 		return p.number()
+	case parseFunctionLiteral:
+		return p.literal()
 	default:
 		return p.newError(errMissingExpr)
 	}
@@ -259,6 +285,8 @@ func (p *parser) unary() error {
 	switch p.previous.kind {
 	case tokenMinus:
 		p.emitByte(byte(OpNegate))
+	case tokenBang:
+		p.emitByte(byte(OpNot))
 	}
 	return nil
 }
