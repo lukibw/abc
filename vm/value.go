@@ -1,4 +1,4 @@
-package abc
+package vm
 
 import "fmt"
 
@@ -25,19 +25,6 @@ func (v value) String() string {
 	return fmt.Sprint(v.as)
 }
 
-func (v value) kind() string {
-	switch v.as.(type) {
-	case nil:
-		return "nil"
-	case bool:
-		return "boolean"
-	case float64:
-		return "number"
-	default:
-		panic(fmt.Sprintf("value has unexpected type '%T'", v.as))
-	}
-}
-
 func (v value) isNil() bool {
 	return v.as == nil
 }
@@ -49,6 +36,10 @@ func (v value) isBoolean() bool {
 func (v value) isNumber() bool {
 	_, ok := v.as.(float64)
 	return ok
+}
+
+func (v value) isFalsey() bool {
+	return v.isNil() || (v.isBoolean() && !v.asBoolean())
 }
 
 func (v value) asBoolean() bool {
