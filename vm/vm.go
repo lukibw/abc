@@ -2,6 +2,7 @@ package vm
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/lukibw/abc/compiler"
@@ -16,22 +17,22 @@ func New(c compiler.Compiler) (VM, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &vm{chunk, make([]value, 0), sync.Mutex{}}, nil
+	return &vm{chunk, make([]compiler.Value, 0), sync.Mutex{}}, nil
 }
 
 type vm struct {
 	chunk *compiler.Chunk
-	stack []value
+	stack []compiler.Value
 	mutex sync.Mutex
 }
 
-func (vm *vm) push(v value) {
+func (vm *vm) push(v compiler.Value) {
 	vm.mutex.Lock()
 	defer vm.mutex.Unlock()
 	vm.stack = append(vm.stack, v)
 }
 
-func (vm *vm) pop() value {
+func (vm *vm) pop() compiler.Value {
 	vm.mutex.Lock()
 	defer vm.mutex.Unlock()
 	item := vm.stack[len(vm.stack)-1]
@@ -39,29 +40,29 @@ func (vm *vm) pop() value {
 	return item
 }
 
-func (vm *vm) peek(distance int) value {
+func (vm *vm) peek(distance int) compiler.Value {
 	vm.mutex.Lock()
 	defer vm.mutex.Unlock()
 	return vm.stack[len(vm.stack)-1-distance]
 }
 
 func (vm *vm) binary(f func(x, y float64) float64) error {
-	if !vm.peek(0).isNumber() || !vm.peek(1).isNumber() {
+	if !vm.peek(0).IsNumber() || !vm.peek(1).IsNumber() {
 		return &Error{ErrNumberOperands}
 	}
-	b := vm.pop().asNumber()
-	a := vm.pop().asNumber()
-	vm.push(newNumber(f(a, b)))
+	b := vm.pop().AsNumber()
+	a := vm.pop().AsNumber()
+	vm.push(compiler.NewNumber(f(a, b)))
 	return nil
 }
 
 func (vm *vm) comparison(f func(x, y float64) bool) error {
-	if !vm.peek(0).isNumber() || !vm.peek(1).isNumber() {
+	if !vm.peek(0).IsNumber() || !vm.peek(1).IsNumber() {
 		return &Error{ErrNumberOperands}
 	}
-	b := vm.pop().asNumber()
-	a := vm.pop().asNumber()
-	vm.push(newBoolean(f(a, b)))
+	b := vm.pop().AsNumber()
+	a := vm.pop().AsNumber()
+	vm.push(compiler.NewBoolean(f(a, b)))
 	return nil
 }
 
@@ -80,17 +81,31 @@ func (vm *vm) Run() error {
 		case compiler.OperationConstant:
 			j := vm.chunk.Code[i]
 			constant := vm.chunk.Constants[j]
-			fmt.Printf(" %d %g", j, constant)
+			fmt.Printf(" %d %s", j, constant)
 			i++
-			vm.push(newNumber(constant))
+			vm.push(constant)
 		case compiler.OperationNegate:
-			if !vm.peek(0).isNumber() {
+			if !vm.peek(0).IsNumber() {
 				return &Error{ErrNumberOperand}
 			}
-			vm.push(newNumber(-vm.pop().asNumber()))
+			vm.push(compiler.NewNumber(-vm.pop().AsNumber()))
 		case compiler.OperationAdd:
-			if err = vm.binary(func(x, y float64) float64 { return x + y }); err != nil {
-				return err
+			b := vm.peek(0)
+			a := vm.peek(1)
+			areStrings := a.IsString() && b.IsString()
+			areNumbers := a.IsNumber() && b.IsNumber()
+			if !areStrings && !areNumbers {
+				return &Error{ErrNumberOrStringOperands}
+			}
+			b = vm.pop()
+			a = vm.pop()
+			if areStrings {
+				var sb strings.Builder
+				sb.WriteString(a.AsString())
+				sb.WriteString(b.AsString())
+				vm.push(compiler.NewString(sb.String()))
+			} else {
+				vm.push(compiler.NewNumber(a.AsNumber() + b.AsNumber()))
 			}
 		case compiler.OperationSubtract:
 			if err = vm.binary(func(x, y float64) float64 { return x - y }); err != nil {
@@ -105,17 +120,17 @@ func (vm *vm) Run() error {
 				return err
 			}
 		case compiler.OperationNil:
-			vm.push(newNil())
+			vm.push(compiler.NewNil())
 		case compiler.OperationFalse:
-			vm.push(newBoolean(false))
+			vm.push(compiler.NewBoolean(false))
 		case compiler.OperationTrue:
-			vm.push(newBoolean(true))
+			vm.push(compiler.NewBoolean(true))
 		case compiler.OperationNot:
-			vm.push(newBoolean(vm.pop().isFalsey()))
+			vm.push(compiler.NewBoolean(vm.pop().IsFalsey()))
 		case compiler.OperationEqual:
 			b := vm.pop()
 			a := vm.pop()
-			vm.push(newBoolean(a == b))
+			vm.push(compiler.NewBoolean(a == b))
 		case compiler.OperationGreater:
 			if err = vm.comparison(func(x, y float64) bool { return x > y }); err != nil {
 				return err

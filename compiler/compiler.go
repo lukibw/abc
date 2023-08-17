@@ -10,7 +10,7 @@ import (
 
 type Chunk struct {
 	Code      []byte
-	Constants []float64
+	Constants []Value
 }
 
 type Compiler interface {
@@ -37,12 +37,12 @@ func (c *compiler) emitOperations(o1, o2 Operation) {
 	c.emitOperation(o2)
 }
 
-func (c *compiler) emitConstant(n float64) error {
+func (c *compiler) emitConstant(v Value) error {
 	if len(c.chunk.Constants)+1 > math.MaxUint8 {
 		return &Error{ErrTooManyConstants, c.previous}
 	}
 	c.chunk.Code = append(c.chunk.Code, byte(OperationConstant))
-	c.chunk.Constants = append(c.chunk.Constants, n)
+	c.chunk.Constants = append(c.chunk.Constants, v)
 	c.chunk.Code = append(c.chunk.Code, byte(len(c.chunk.Constants)-1))
 	return nil
 }
@@ -69,7 +69,11 @@ func (c *compiler) number() error {
 	if err != nil {
 		panic("compiler: cannot parse float from token lexeme")
 	}
-	return c.emitConstant(n)
+	return c.emitConstant(NewNumber(n))
+}
+
+func (c *compiler) string() error {
+	return c.emitConstant(NewString(c.previous.Lexeme[1 : len(c.previous.Lexeme)-1]))
 }
 
 func (c *compiler) binary() error {
@@ -151,6 +155,8 @@ func (c *compiler) parseFunction(f parseFunction) error {
 		return c.unary()
 	case parseFunctionNumber:
 		return c.number()
+	case parseFunctionString:
+		return c.string()
 	case parseFunctionLiteral:
 		c.literal()
 		return nil
@@ -185,7 +191,7 @@ func (c *compiler) expression() error {
 func (c *compiler) Run() (*Chunk, error) {
 	if c.chunk == nil {
 		var err error
-		c.chunk = &Chunk{make([]byte, 0), make([]float64, 0)}
+		c.chunk = &Chunk{make([]byte, 0), make([]Value, 0)}
 		if err = c.advance(); err != nil {
 			return nil, err
 		}

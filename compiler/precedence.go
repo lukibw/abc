@@ -27,6 +27,7 @@ const (
 	parseFunctionUnary
 	parseFunctionGrouping
 	parseFunctionLiteral
+	parseFunctionString
 )
 
 type parseRule struct {
@@ -56,7 +57,7 @@ var parseRules = map[scanner.TokenKind]parseRule{
 	scanner.TokenLess:         {parseFunctionNone, parseFunctionBinary, precedenceComparison},
 	scanner.TokenLessEqual:    {parseFunctionNone, parseFunctionBinary, precedenceComparison},
 	scanner.TokenIdentifier:   {parseFunctionNone, parseFunctionNone, precedenceNone},
-	scanner.TokenString:       {parseFunctionNone, parseFunctionNone, precedenceNone},
+	scanner.TokenString:       {parseFunctionString, parseFunctionNone, precedenceNone},
 	scanner.TokenNumber:       {parseFunctionNumber, parseFunctionNone, precedenceNone},
 	scanner.TokenAnd:          {parseFunctionNone, parseFunctionNone, precedenceNone},
 	scanner.TokenClass:        {parseFunctionNone, parseFunctionNone, precedenceNone},

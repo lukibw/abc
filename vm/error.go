@@ -7,11 +7,13 @@ type ErrorKind int
 const (
 	ErrNumberOperand ErrorKind = iota
 	ErrNumberOperands
+	ErrNumberOrStringOperands
 )
 
 var errorMessages = map[ErrorKind]string{
-	ErrNumberOperand:  "operand must be a number",
-	ErrNumberOperands: "operands must be numbers",
+	ErrNumberOperand:          "operand must be a number",
+	ErrNumberOperands:         "operands must be numbers",
+	ErrNumberOrStringOperands: "operands must be two numbers or two strings",
 }
 
 func (k ErrorKind) String() string {
