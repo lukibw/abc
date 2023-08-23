@@ -11,16 +11,26 @@ type ErrorKind int
 
 const (
 	ErrTooManyConstants ErrorKind = iota
+	ErrInvalidAssignTarget
+	ErrMissingVarName
+	ErrMissingVarSemicolon
+	ErrMissingValueSemicolon
 	ErrMissingExpr
 	ErrMissingExprEnd
 	ErrMissingExprRightParen
+	ErrMissingExprSemicolon
 )
 
 var errorMessages = map[ErrorKind]string{
 	ErrTooManyConstants:      "too many constants in one chunk",
+	ErrInvalidAssignTarget:   "invalid assignment target",
+	ErrMissingVarName:        "missing variable name",
+	ErrMissingVarSemicolon:   "missing ';' after variable declaration",
+	ErrMissingValueSemicolon: "missing ';' after value",
 	ErrMissingExpr:           "missing expression",
 	ErrMissingExprEnd:        "missing end of expression",
 	ErrMissingExprRightParen: "missing ')' after expression",
+	ErrMissingExprSemicolon:  "missing ';' after expression",
 }
 
 func (k ErrorKind) String() string {

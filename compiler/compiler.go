@@ -2,16 +2,10 @@ package compiler
 
 import (
 	"fmt"
-	"math"
 	"strconv"
 
 	"github.com/lukibw/abc/scanner"
 )
-
-type Chunk struct {
-	Code      []byte
-	Constants []Value
-}
 
 type Compiler interface {
 	Run() (*Chunk, error)
@@ -28,8 +22,26 @@ type compiler struct {
 	chunk    *Chunk
 }
 
+func (c *compiler) makeConstant(v Value) (uint8, error) {
+	i, ok := c.chunk.writeConstant(v)
+	if !ok {
+		return 0, &Error{ErrTooManyConstants, c.previous}
+	}
+	return i, nil
+}
+
+func (c *compiler) emitConstant(v Value) error {
+	i, err := c.makeConstant(v)
+	if err != nil {
+		return err
+	}
+	c.chunk.writeOperation(OperationConstant)
+	c.chunk.write(i)
+	return nil
+}
+
 func (c *compiler) emitOperation(o Operation) {
-	c.chunk.Code = append(c.chunk.Code, byte(o))
+	c.chunk.writeOperation(o)
 }
 
 func (c *compiler) emitOperations(o1, o2 Operation) {
@@ -37,14 +49,8 @@ func (c *compiler) emitOperations(o1, o2 Operation) {
 	c.emitOperation(o2)
 }
 
-func (c *compiler) emitConstant(v Value) error {
-	if len(c.chunk.Constants)+1 > math.MaxUint8 {
-		return &Error{ErrTooManyConstants, c.previous}
-	}
-	c.chunk.Code = append(c.chunk.Code, byte(OperationConstant))
-	c.chunk.Constants = append(c.chunk.Constants, v)
-	c.chunk.Code = append(c.chunk.Code, byte(len(c.chunk.Constants)-1))
-	return nil
+func (c *compiler) check(k scanner.TokenKind) bool {
+	return c.current.Kind == k
 }
 
 func (c *compiler) advance() error {
@@ -145,7 +151,32 @@ func (c *compiler) unary() error {
 	return nil
 }
 
-func (c *compiler) parseFunction(f parseFunction) error {
+func (c *compiler) namedVariable(t *scanner.Token, canAssign bool) error {
+	i, err := c.identifierConstant(t)
+	if err != nil {
+		return err
+	}
+	if canAssign && c.check(scanner.TokenEqual) {
+		if err = c.advance(); err != nil {
+			return err
+		}
+		if err = c.expression(); err != nil {
+			return err
+		}
+		c.emitOperation(OperationSetGlobal)
+		c.chunk.write(i)
+	} else {
+		c.emitOperation(OperationGetGlobal)
+		c.chunk.write(i)
+	}
+	return nil
+}
+
+func (c *compiler) variable(canAssign bool) error {
+	return c.namedVariable(c.previous, canAssign)
+}
+
+func (c *compiler) parseFunction(f parseFunction, canAssign bool) error {
 	switch f {
 	case parseFunctionBinary:
 		return c.binary()
@@ -160,6 +191,8 @@ func (c *compiler) parseFunction(f parseFunction) error {
 	case parseFunctionLiteral:
 		c.literal()
 		return nil
+	case parseFunctionVariable:
+		return c.variable(canAssign)
 	default:
 		return &Error{ErrMissingExpr, c.previous}
 	}
@@ -170,22 +203,111 @@ func (c *compiler) parsePrecedence(min precedence) error {
 	if err = c.advance(); err != nil {
 		return err
 	}
-	if err = c.parseFunction(parseRules[c.previous.Kind].prefix); err != nil {
+	canAssign := min <= precedenceAssignment
+	if err = c.parseFunction(parseRules[c.previous.Kind].prefix, canAssign); err != nil {
 		return err
 	}
 	for min <= parseRules[c.current.Kind].precedence {
 		if err = c.advance(); err != nil {
 			return err
 		}
-		if err = c.parseFunction(parseRules[c.previous.Kind].infix); err != nil {
+		if err = c.parseFunction(parseRules[c.previous.Kind].infix, canAssign); err != nil {
 			return err
 		}
+	}
+	if canAssign && c.check(scanner.TokenEqual) {
+		if err = c.advance(); err != nil {
+			return err
+		}
+		return &Error{ErrInvalidAssignTarget, c.previous}
 	}
 	return nil
 }
 
 func (c *compiler) expression() error {
 	return c.parsePrecedence(precedenceAssignment)
+}
+
+func (c *compiler) printStatement() error {
+	var err error
+	if err = c.expression(); err != nil {
+		return err
+	}
+	if err = c.consume(scanner.TokenSemicolon, ErrMissingValueSemicolon); err != nil {
+		return err
+	}
+	c.emitOperation(OperationPrint)
+	return nil
+}
+
+func (c *compiler) expressionStatement() error {
+	var err error
+	if err = c.expression(); err != nil {
+		return err
+	}
+	if err = c.consume(scanner.TokenSemicolon, ErrMissingExprSemicolon); err != nil {
+		return err
+	}
+	c.emitOperation(OperationPop)
+	return nil
+}
+
+func (c *compiler) statement() error {
+	if c.check(scanner.TokenPrint) {
+		if err := c.advance(); err != nil {
+			return err
+		}
+		return c.printStatement()
+	}
+	return c.expressionStatement()
+}
+
+func (c *compiler) identifierConstant(t *scanner.Token) (uint8, error) {
+	return c.makeConstant(NewString(t.Lexeme))
+}
+
+func (c *compiler) parseVariable(k ErrorKind) (uint8, error) {
+	if err := c.consume(scanner.TokenIdentifier, k); err != nil {
+		return 0, err
+	}
+	return c.identifierConstant(c.previous)
+}
+
+func (c *compiler) defineVariable(v uint8) {
+	c.emitOperation(OperationDefineGlobal)
+	c.chunk.write(v)
+}
+
+func (c *compiler) varDeclaration() error {
+	global, err := c.parseVariable(ErrMissingVarName)
+	if err != nil {
+		return err
+	}
+	if c.check(scanner.TokenEqual) {
+		if err = c.advance(); err != nil {
+			return err
+		}
+		if err = c.expression(); err != nil {
+			return err
+		}
+	} else {
+		c.emitOperation(OperationNil)
+	}
+	if err = c.consume(scanner.TokenSemicolon, ErrMissingVarSemicolon); err != nil {
+		return err
+	}
+	c.defineVariable(global)
+	return nil
+}
+
+func (c *compiler) declaration() error {
+	if c.check(scanner.TokenVar) {
+		if err := c.advance(); err != nil {
+			return err
+		}
+		return c.varDeclaration()
+	}
+	return c.statement()
 }
 
 func (c *compiler) Run() (*Chunk, error) {
@@ -195,8 +317,16 @@ func (c *compiler) Run() (*Chunk, error) {
 		if err = c.advance(); err != nil {
 			return nil, err
 		}
-		if err = c.expression(); err != nil {
-			return nil, err
+		for {
+			if c.check(scanner.TokenEof) {
+				if err = c.advance(); err != nil {
+					return nil, err
+				}
+				break
+			}
+			if err = c.declaration(); err != nil {
+				return nil, err
+			}
 		}
 		if err = c.consume(scanner.TokenEof, ErrMissingExprEnd); err != nil {
 			return nil, err

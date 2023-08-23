@@ -78,7 +78,7 @@ func (s *scanner) skipWhitespace() {
 
 func (s *scanner) string() (*Token, error) {
 	for s.peek() != '"' && !s.isAtEnd() {
-		if s.peek() != '\n' {
+		if s.peek() == '\n' {
 			s.line++
 		}
 		s.advance()

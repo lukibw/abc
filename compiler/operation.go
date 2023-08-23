@@ -6,6 +6,11 @@ const (
 	OperationReturn Operation = iota
 	OperationConstant
 	OperationNegate
+	OperationPrint
+	OperationPop
+	OperationDefineGlobal
+	OperationGetGlobal
+	OperationSetGlobal
 	OperationNot
 	OperationAdd
 	OperationSubtract
@@ -20,20 +25,25 @@ const (
 )
 
 var operations = map[Operation]string{
-	OperationReturn:   "RETURN",
-	OperationConstant: "CONSTANT",
-	OperationNegate:   "NEGATE",
-	OperationNot:      "NOT",
-	OperationAdd:      "ADD",
-	OperationSubtract: "SUBTRACT",
-	OperationMultiply: "MULTIPLY",
-	OperationDivide:   "DIVIDE",
-	OperationNil:      "NIL",
-	OperationFalse:    "FALSE",
-	OperationTrue:     "TRUE",
-	OperationEqual:    "EQUAL",
-	OperationGreater:  "GREATER",
-	OperationLess:     "LESS",
+	OperationReturn:       "RETURN",
+	OperationConstant:     "CONSTANT",
+	OperationNegate:       "NEGATE",
+	OperationNot:          "NOT",
+	OperationAdd:          "ADD",
+	OperationSubtract:     "SUBTRACT",
+	OperationMultiply:     "MULTIPLY",
+	OperationDivide:       "DIVIDE",
+	OperationNil:          "NIL",
+	OperationFalse:        "FALSE",
+	OperationTrue:         "TRUE",
+	OperationEqual:        "EQUAL",
+	OperationGreater:      "GREATER",
+	OperationLess:         "LESS",
+	OperationPrint:        "PRINT",
+	OperationPop:          "POP",
+	OperationDefineGlobal: "DEFINE_GLOBAL",
+	OperationGetGlobal:    "GET_GLOBAL",
+	OperationSetGlobal:    "SET_GLOBAL",
 }
 
 func (o Operation) String() string {

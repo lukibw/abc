@@ -17,13 +17,14 @@ func New(c compiler.Compiler) (VM, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &vm{chunk, make([]compiler.Value, 0), sync.Mutex{}}, nil
+	return &vm{chunk, make([]compiler.Value, 0), sync.Mutex{}, make(map[string]compiler.Value)}, nil
 }
 
 type vm struct {
-	chunk *compiler.Chunk
-	stack []compiler.Value
-	mutex sync.Mutex
+	chunk   *compiler.Chunk
+	stack   []compiler.Value
+	mutex   sync.Mutex
+	globals map[string]compiler.Value
 }
 
 func (vm *vm) push(v compiler.Value) {
@@ -74,9 +75,38 @@ func (vm *vm) Run() error {
 		fmt.Printf("%04d %s", i, o)
 		i++
 		switch o {
+		case compiler.OperationSetGlobal:
+			j := vm.chunk.Code[i]
+			constant := vm.chunk.Constants[j]
+			fmt.Printf(" %d %s", j, constant)
+			i++
+			_, ok := vm.globals[constant.AsString()]
+			if !ok {
+				return &Error{ErrUndefinedVar}
+			}
+			vm.globals[constant.AsString()] = vm.peek(0)
+		case compiler.OperationGetGlobal:
+			j := vm.chunk.Code[i]
+			constant := vm.chunk.Constants[j]
+			fmt.Printf(" %d %s", j, constant)
+			i++
+			value, ok := vm.globals[constant.AsString()]
+			if !ok {
+				return &Error{ErrUndefinedVar}
+			}
+			vm.push(value)
+		case compiler.OperationDefineGlobal:
+			j := vm.chunk.Code[i]
+			constant := vm.chunk.Constants[j]
+			fmt.Printf(" %d %s", j, constant)
+			i++
+			vm.globals[constant.AsString()] = vm.pop()
+		case compiler.OperationPrint:
+			fmt.Println(vm.pop())
+		case compiler.OperationPop:
+			vm.pop()
 		case compiler.OperationReturn:
 			fmt.Println()
-			fmt.Println(vm.pop())
 			return nil
 		case compiler.OperationConstant:
 			j := vm.chunk.Code[i]
