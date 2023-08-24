@@ -11,6 +11,8 @@ const (
 	OperationDefineGlobal
 	OperationGetGlobal
 	OperationSetGlobal
+	OperationGetLocal
+	OperationSetLocal
 	OperationNot
 	OperationAdd
 	OperationSubtract
@@ -44,6 +46,8 @@ var operations = map[Operation]string{
 	OperationDefineGlobal: "DEFINE_GLOBAL",
 	OperationGetGlobal:    "GET_GLOBAL",
 	OperationSetGlobal:    "SET_GLOBAL",
+	OperationGetLocal:     "GET_LOCAL",
+	OperationSetLocal:     "SET_LOCAL",
 }
 
 func (o Operation) String() string {

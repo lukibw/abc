@@ -72,104 +72,101 @@ func (vm *vm) Run() error {
 	i := 0
 	for {
 		o := compiler.Operation(vm.chunk.Code[i])
-		fmt.Printf("%04d %s", i, o)
 		i++
 		switch o {
-		case compiler.OperationSetGlobal:
+		case compiler.OperationConstant, compiler.OperationDefineGlobal, compiler.OperationGetGlobal, compiler.OperationSetGlobal, compiler.OperationGetLocal, compiler.OperationSetLocal:
 			j := vm.chunk.Code[i]
-			constant := vm.chunk.Constants[j]
-			fmt.Printf(" %d %s", j, constant)
 			i++
-			_, ok := vm.globals[constant.AsString()]
-			if !ok {
-				return &Error{ErrUndefinedVar}
-			}
-			vm.globals[constant.AsString()] = vm.peek(0)
-		case compiler.OperationGetGlobal:
-			j := vm.chunk.Code[i]
 			constant := vm.chunk.Constants[j]
-			fmt.Printf(" %d %s", j, constant)
-			i++
-			value, ok := vm.globals[constant.AsString()]
-			if !ok {
-				return &Error{ErrUndefinedVar}
+			fmt.Printf("%04d %-16s %d %s\n", i, o, j, vm.chunk.Constants[j])
+			switch o {
+			case compiler.OperationGetLocal:
+				vm.push(vm.stack[j])
+			case compiler.OperationSetLocal:
+				vm.stack[j] = vm.peek(0)
+			case compiler.OperationSetGlobal:
+				_, ok := vm.globals[constant.AsString()]
+				if !ok {
+					return &Error{ErrUndefinedVar}
+				}
+				vm.globals[constant.AsString()] = vm.peek(0)
+			case compiler.OperationGetGlobal:
+				value, ok := vm.globals[constant.AsString()]
+				if !ok {
+					return &Error{ErrUndefinedVar}
+				}
+				vm.push(value)
+			case compiler.OperationDefineGlobal:
+				vm.globals[constant.AsString()] = vm.pop()
+			case compiler.OperationConstant:
+				vm.push(constant)
 			}
-			vm.push(value)
-		case compiler.OperationDefineGlobal:
-			j := vm.chunk.Code[i]
-			constant := vm.chunk.Constants[j]
-			fmt.Printf(" %d %s", j, constant)
-			i++
-			vm.globals[constant.AsString()] = vm.pop()
-		case compiler.OperationPrint:
-			fmt.Println(vm.pop())
-		case compiler.OperationPop:
-			vm.pop()
-		case compiler.OperationReturn:
-			fmt.Println()
-			return nil
-		case compiler.OperationConstant:
-			j := vm.chunk.Code[i]
-			constant := vm.chunk.Constants[j]
-			fmt.Printf(" %d %s", j, constant)
-			i++
-			vm.push(constant)
-		case compiler.OperationNegate:
-			if !vm.peek(0).IsNumber() {
-				return &Error{ErrNumberOperand}
-			}
-			vm.push(compiler.NewNumber(-vm.pop().AsNumber()))
-		case compiler.OperationAdd:
-			b := vm.peek(0)
-			a := vm.peek(1)
-			areStrings := a.IsString() && b.IsString()
-			areNumbers := a.IsNumber() && b.IsNumber()
-			if !areStrings && !areNumbers {
-				return &Error{ErrNumberOrStringOperands}
-			}
-			b = vm.pop()
-			a = vm.pop()
-			if areStrings {
-				var sb strings.Builder
-				sb.WriteString(a.AsString())
-				sb.WriteString(b.AsString())
-				vm.push(compiler.NewString(sb.String()))
-			} else {
-				vm.push(compiler.NewNumber(a.AsNumber() + b.AsNumber()))
-			}
-		case compiler.OperationSubtract:
-			if err = vm.binary(func(x, y float64) float64 { return x - y }); err != nil {
-				return err
-			}
-		case compiler.OperationMultiply:
-			if err = vm.binary(func(x, y float64) float64 { return x * y }); err != nil {
-				return err
-			}
-		case compiler.OperationDivide:
-			if err = vm.binary(func(x, y float64) float64 { return x / y }); err != nil {
-				return err
-			}
-		case compiler.OperationNil:
-			vm.push(compiler.NewNil())
-		case compiler.OperationFalse:
-			vm.push(compiler.NewBoolean(false))
-		case compiler.OperationTrue:
-			vm.push(compiler.NewBoolean(true))
-		case compiler.OperationNot:
-			vm.push(compiler.NewBoolean(vm.pop().IsFalsey()))
-		case compiler.OperationEqual:
-			b := vm.pop()
-			a := vm.pop()
-			vm.push(compiler.NewBoolean(a == b))
-		case compiler.OperationGreater:
-			if err = vm.comparison(func(x, y float64) bool { return x > y }); err != nil {
-				return err
-			}
-		case compiler.OperationLess:
-			if err = vm.comparison(func(x, y float64) bool { return x < y }); err != nil {
-				return err
+		default:
+			fmt.Printf("%04d %s\n", i, o)
+			switch o {
+			case compiler.OperationPrint:
+				fmt.Println(vm.pop())
+			case compiler.OperationPop:
+				vm.pop()
+			case compiler.OperationReturn:
+				return nil
+			case compiler.OperationNegate:
+				if !vm.peek(0).IsNumber() {
+					return &Error{ErrNumberOperand}
+				}
+				vm.push(compiler.NewNumber(-vm.pop().AsNumber()))
+			case compiler.OperationAdd:
+				b := vm.peek(0)
+				a := vm.peek(1)
+				areStrings := a.IsString() && b.IsString()
+				areNumbers := a.IsNumber() && b.IsNumber()
+				if !areStrings && !areNumbers {
+					return &Error{ErrNumberOrStringOperands}
+				}
+				b = vm.pop()
+				a = vm.pop()
+				if areStrings {
+					var sb strings.Builder
+					sb.WriteString(a.AsString())
+					sb.WriteString(b.AsString())
+					vm.push(compiler.NewString(sb.String()))
+				} else {
+					vm.push(compiler.NewNumber(a.AsNumber() + b.AsNumber()))
+				}
+			case compiler.OperationSubtract:
+				if err = vm.binary(func(x, y float64) float64 { return x - y }); err != nil {
+					return err
+				}
+			case compiler.OperationMultiply:
+				if err = vm.binary(func(x, y float64) float64 { return x * y }); err != nil {
+					return err
+				}
+			case compiler.OperationDivide:
+				if err = vm.binary(func(x, y float64) float64 { return x / y }); err != nil {
+					return err
+				}
+			case compiler.OperationNil:
+				vm.push(compiler.NewNil())
+			case compiler.OperationFalse:
+				vm.push(compiler.NewBoolean(false))
+			case compiler.OperationTrue:
+				vm.push(compiler.NewBoolean(true))
+			case compiler.OperationNot:
+				vm.push(compiler.NewBoolean(vm.pop().IsFalsey()))
+			case compiler.OperationEqual:
+				b := vm.pop()
+				a := vm.pop()
+				vm.push(compiler.NewBoolean(a == b))
+			case compiler.OperationGreater:
+				if err = vm.comparison(func(x, y float64) bool { return x > y }); err != nil {
+					return err
+				}
+			case compiler.OperationLess:
+				if err = vm.comparison(func(x, y float64) bool { return x < y }); err != nil {
+					return err
+				}
 			}
 		}
-		fmt.Println()
+
 	}
 }

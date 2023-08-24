@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 
 	"github.com/lukibw/abc/scanner"
@@ -12,14 +13,21 @@ type Compiler interface {
 }
 
 func New(s scanner.Scanner) Compiler {
-	return &compiler{s, nil, nil, nil}
+	return &compiler{s, nil, nil, make([]local, 0), 0, nil}
+}
+
+type local struct {
+	name  *scanner.Token
+	depth int
 }
 
 type compiler struct {
-	scanner  scanner.Scanner
-	previous *scanner.Token
-	current  *scanner.Token
-	chunk    *Chunk
+	scanner    scanner.Scanner
+	previous   *scanner.Token
+	current    *scanner.Token
+	locals     []local
+	scopeDepth int
+	chunk      *Chunk
 }
 
 func (c *compiler) makeConstant(v Value) (uint8, error) {
@@ -68,6 +76,18 @@ func (c *compiler) consume(t scanner.TokenKind, e ErrorKind) error {
 		return c.advance()
 	}
 	return &Error{e, c.current}
+}
+
+func (c *compiler) beginScope() {
+	c.scopeDepth++
+}
+
+func (c *compiler) endScope() {
+	c.scopeDepth--
+	for len(c.locals) > 0 && c.locals[len(c.locals)-1].depth > c.scopeDepth {
+		c.emitOperation(OperationPop)
+		c.locals = c.locals[:len(c.locals)-1]
+	}
 }
 
 func (c *compiler) number() error {
@@ -151,10 +171,35 @@ func (c *compiler) unary() error {
 	return nil
 }
 
+func (c *compiler) resolveLocal(t *scanner.Token) (int, error) {
+	for i := len(c.locals) - 1; i >= 0; i-- {
+		if t.Lexeme == c.locals[i].name.Lexeme {
+			if c.locals[i].depth == -1 {
+				return 0, &Error{ErrVarOwnInitializer, c.previous}
+			}
+			return i, nil
+		}
+	}
+	return -1, nil
+}
+
 func (c *compiler) namedVariable(t *scanner.Token, canAssign bool) error {
-	i, err := c.identifierConstant(t)
+	var getOp, setOp Operation
+	i, err := c.resolveLocal(t)
 	if err != nil {
 		return err
+	}
+	if i != -1 {
+		getOp = OperationGetLocal
+		setOp = OperationSetLocal
+	} else {
+		x, err := c.identifierConstant(t)
+		if err != nil {
+			return err
+		}
+		i = int(x)
+		getOp = OperationGetGlobal
+		setOp = OperationSetGlobal
 	}
 	if canAssign && c.check(scanner.TokenEqual) {
 		if err = c.advance(); err != nil {
@@ -163,11 +208,11 @@ func (c *compiler) namedVariable(t *scanner.Token, canAssign bool) error {
 		if err = c.expression(); err != nil {
 			return err
 		}
-		c.emitOperation(OperationSetGlobal)
-		c.chunk.write(i)
+		c.emitOperation(setOp)
+		c.chunk.write(uint8(i))
 	} else {
-		c.emitOperation(OperationGetGlobal)
-		c.chunk.write(i)
+		c.emitOperation(getOp)
+		c.chunk.write(uint8(i))
 	}
 	return nil
 }
@@ -240,6 +285,16 @@ func (c *compiler) printStatement() error {
 	return nil
 }
 
+func (c *compiler) block() error {
+	var err error
+	for !c.check(scanner.TokenRightBrace) && !c.check(scanner.TokenEof) {
+		if err = c.declaration(); err != nil {
+			return err
+		}
+	}
+	return c.consume(scanner.TokenRightBrace, ErrMissingBlockRightBrace)
+}
+
 func (c *compiler) expressionStatement() error {
 	var err error
 	if err = c.expression(); err != nil {
@@ -253,27 +308,77 @@ func (c *compiler) expressionStatement() error {
 }
 
 func (c *compiler) statement() error {
-	if c.check(scanner.TokenPrint) {
+	switch {
+	case c.check(scanner.TokenPrint):
 		if err := c.advance(); err != nil {
 			return err
 		}
 		return c.printStatement()
+	case c.check(scanner.TokenLeftBrace):
+		if err := c.advance(); err != nil {
+			return err
+		}
+		c.beginScope()
+		if err := c.block(); err != nil {
+			return err
+		}
+		c.endScope()
+		return nil
+	default:
+		return c.expressionStatement()
 	}
-	return c.expressionStatement()
 }
 
 func (c *compiler) identifierConstant(t *scanner.Token) (uint8, error) {
 	return c.makeConstant(NewString(t.Lexeme))
 }
 
+func (c *compiler) addLocal(name *scanner.Token) error {
+	if len(c.locals) > math.MaxUint8 {
+		return &Error{ErrTooManyLocals, c.previous}
+	}
+	c.locals = append(c.locals, local{name, -1})
+	return nil
+}
+
+func (c *compiler) declareVariable() error {
+	if c.scopeDepth == 0 {
+		return nil
+	}
+	for i := len(c.locals) - 1; i >= 0; i-- {
+		if c.locals[i].depth != -1 && c.locals[i].depth < c.scopeDepth {
+			break
+		}
+		if c.previous.Lexeme == c.locals[i].name.Lexeme {
+			return &Error{ErrVarAlreadyDefined, c.previous}
+		}
+	}
+	return c.addLocal(c.previous)
+}
+
 func (c *compiler) parseVariable(k ErrorKind) (uint8, error) {
-	if err := c.consume(scanner.TokenIdentifier, k); err != nil {
+	var err error
+	if err = c.consume(scanner.TokenIdentifier, k); err != nil {
 		return 0, err
+	}
+	if err = c.declareVariable(); err != nil {
+		return 0, err
+	}
+	if c.scopeDepth > 0 {
+		return 0, nil
 	}
 	return c.identifierConstant(c.previous)
 }
 
+func (c *compiler) markInitialized() {
+	c.locals[len(c.locals)-1].depth = c.scopeDepth
+}
+
 func (c *compiler) defineVariable(v uint8) {
+	if c.scopeDepth > 0 {
+		c.markInitialized()
+		return
+	}
 	c.emitOperation(OperationDefineGlobal)
 	c.chunk.write(v)
 }

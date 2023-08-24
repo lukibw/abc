@@ -11,6 +11,9 @@ type ErrorKind int
 
 const (
 	ErrTooManyConstants ErrorKind = iota
+	ErrTooManyLocals
+	ErrVarAlreadyDefined
+	ErrVarOwnInitializer
 	ErrInvalidAssignTarget
 	ErrMissingVarName
 	ErrMissingVarSemicolon
@@ -19,18 +22,23 @@ const (
 	ErrMissingExprEnd
 	ErrMissingExprRightParen
 	ErrMissingExprSemicolon
+	ErrMissingBlockRightBrace
 )
 
 var errorMessages = map[ErrorKind]string{
-	ErrTooManyConstants:      "too many constants in one chunk",
-	ErrInvalidAssignTarget:   "invalid assignment target",
-	ErrMissingVarName:        "missing variable name",
-	ErrMissingVarSemicolon:   "missing ';' after variable declaration",
-	ErrMissingValueSemicolon: "missing ';' after value",
-	ErrMissingExpr:           "missing expression",
-	ErrMissingExprEnd:        "missing end of expression",
-	ErrMissingExprRightParen: "missing ')' after expression",
-	ErrMissingExprSemicolon:  "missing ';' after expression",
+	ErrTooManyConstants:       "too many constants in one chunk",
+	ErrTooManyLocals:          "too many local variables in function",
+	ErrVarAlreadyDefined:      "already a variable with this name in this scope",
+	ErrVarOwnInitializer:      "cannot read local variable in its own intializer",
+	ErrInvalidAssignTarget:    "invalid assignment target",
+	ErrMissingVarName:         "missing variable name",
+	ErrMissingVarSemicolon:    "missing ';' after variable declaration",
+	ErrMissingValueSemicolon:  "missing ';' after value",
+	ErrMissingExpr:            "missing expression",
+	ErrMissingExprEnd:         "missing end of expression",
+	ErrMissingExprRightParen:  "missing ')' after expression",
+	ErrMissingExprSemicolon:   "missing ';' after expression",
+	ErrMissingBlockRightBrace: "missing '}' after block",
 }
 
 func (k ErrorKind) String() string {
