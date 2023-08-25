@@ -24,6 +24,9 @@ const (
 	OperationEqual
 	OperationGreater
 	OperationLess
+	OperationJump
+	OperationJumpIfFalse
+	OperationLoop
 )
 
 var operations = map[Operation]string{
@@ -48,6 +51,9 @@ var operations = map[Operation]string{
 	OperationSetGlobal:    "SET_GLOBAL",
 	OperationGetLocal:     "GET_LOCAL",
 	OperationSetLocal:     "SET_LOCAL",
+	OperationJump:         "JUMP",
+	OperationJumpIfFalse:  "JUMP_IF_FALSE",
+	OperationLoop:         "LOOP",
 }
 
 func (o Operation) String() string {

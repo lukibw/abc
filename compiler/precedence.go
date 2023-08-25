@@ -29,6 +29,8 @@ const (
 	parseFunctionLiteral
 	parseFunctionString
 	parseFunctionVariable
+	parseFunctionAnd
+	parseFunctionOr
 )
 
 type parseRule struct {
@@ -60,7 +62,7 @@ var parseRules = map[scanner.TokenKind]parseRule{
 	scanner.TokenIdentifier:   {parseFunctionVariable, parseFunctionNone, precedenceNone},
 	scanner.TokenString:       {parseFunctionString, parseFunctionNone, precedenceNone},
 	scanner.TokenNumber:       {parseFunctionNumber, parseFunctionNone, precedenceNone},
-	scanner.TokenAnd:          {parseFunctionNone, parseFunctionNone, precedenceNone},
+	scanner.TokenAnd:          {parseFunctionNone, parseFunctionAnd, precedenceAnd},
 	scanner.TokenClass:        {parseFunctionNone, parseFunctionNone, precedenceNone},
 	scanner.TokenElse:         {parseFunctionNone, parseFunctionNone, precedenceNone},
 	scanner.TokenFalse:        {parseFunctionLiteral, parseFunctionNone, precedenceNone},
@@ -68,7 +70,7 @@ var parseRules = map[scanner.TokenKind]parseRule{
 	scanner.TokenFun:          {parseFunctionNone, parseFunctionNone, precedenceNone},
 	scanner.TokenIf:           {parseFunctionNone, parseFunctionNone, precedenceNone},
 	scanner.TokenNil:          {parseFunctionLiteral, parseFunctionNone, precedenceNone},
-	scanner.TokenOr:           {parseFunctionNone, parseFunctionNone, precedenceNone},
+	scanner.TokenOr:           {parseFunctionNone, parseFunctionOr, precedenceOr},
 	scanner.TokenPrint:        {parseFunctionNone, parseFunctionNone, precedenceNone},
 	scanner.TokenReturn:       {parseFunctionNone, parseFunctionNone, precedenceNone},
 	scanner.TokenSuper:        {parseFunctionNone, parseFunctionNone, precedenceNone},

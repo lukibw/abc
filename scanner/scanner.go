@@ -119,6 +119,11 @@ var keywords = map[string]TokenKind{
 	"super":  TokenSuper,
 	"var":    TokenVar,
 	"while":  TokenWhile,
+	"false":  TokenFalse,
+	"for":    TokenFor,
+	"fun":    TokenFun,
+	"this":   TokenThis,
+	"true":   TokenTrue,
 }
 
 func isAlpha(r rune) bool {

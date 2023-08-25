@@ -74,6 +74,20 @@ func (vm *vm) Run() error {
 		o := compiler.Operation(vm.chunk.Code[i])
 		i++
 		switch o {
+		case compiler.OperationJump, compiler.OperationJumpIfFalse, compiler.OperationLoop:
+			offset := uint16(vm.chunk.Code[i])<<8 | uint16(vm.chunk.Code[i+1])
+			i += 2
+			fmt.Printf("%04d %-16s %d\n", i, o, offset)
+			switch o {
+			case compiler.OperationJump:
+				i += int(offset)
+			case compiler.OperationJumpIfFalse:
+				if vm.peek(0).IsFalsey() {
+					i += int(offset)
+				}
+			case compiler.OperationLoop:
+				i -= int(offset)
+			}
 		case compiler.OperationConstant, compiler.OperationDefineGlobal, compiler.OperationGetGlobal, compiler.OperationSetGlobal, compiler.OperationGetLocal, compiler.OperationSetLocal:
 			j := vm.chunk.Code[i]
 			i++

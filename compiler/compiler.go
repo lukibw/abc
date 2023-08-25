@@ -57,6 +57,34 @@ func (c *compiler) emitOperations(o1, o2 Operation) {
 	c.emitOperation(o2)
 }
 
+func (c *compiler) emitLoop(start int) error {
+	c.emitOperation(OperationLoop)
+	offset := len(c.chunk.Code) - start + 2
+	if offset > math.MaxUint16 {
+		return &Error{ErrTooBigLoop, c.previous}
+	}
+	c.chunk.write(byte((offset >> 8) & 0xff))
+	c.chunk.write(byte(offset & 0xff))
+	return nil
+}
+
+func (c *compiler) emitJump(o Operation) int {
+	c.emitOperation(o)
+	c.chunk.write(0xff)
+	c.chunk.write(0xff)
+	return len(c.chunk.Code) - 2
+}
+
+func (c *compiler) patchJump(offset int) error {
+	jump := len(c.chunk.Code) - offset - 2
+	if jump > math.MaxUint16 {
+		return &Error{ErrTooBigJump, c.previous}
+	}
+	c.chunk.Code[offset] = byte((jump >> 8) & 0xff)
+	c.chunk.Code[offset+1] = byte((jump & 0xff))
+	return nil
+}
+
 func (c *compiler) check(k scanner.TokenKind) bool {
 	return c.current.Kind == k
 }
@@ -221,6 +249,29 @@ func (c *compiler) variable(canAssign bool) error {
 	return c.namedVariable(c.previous, canAssign)
 }
 
+func (c *compiler) and() error {
+	endJump := c.emitJump(OperationJumpIfFalse)
+	c.emitOperation(OperationPop)
+	if err := c.parsePrecedence(precedenceAnd); err != nil {
+		return err
+	}
+	return c.patchJump(endJump)
+}
+
+func (c *compiler) or() error {
+	elseJump := c.emitJump(OperationJumpIfFalse)
+	endJump := c.emitJump(OperationJump)
+	var err error
+	if err = c.patchJump(elseJump); err != nil {
+		return err
+	}
+	c.emitOperation(OperationPop)
+	if err = c.parsePrecedence(precedenceOr); err != nil {
+		return err
+	}
+	return c.patchJump(endJump)
+}
+
 func (c *compiler) parseFunction(f parseFunction, canAssign bool) error {
 	switch f {
 	case parseFunctionBinary:
@@ -238,6 +289,10 @@ func (c *compiler) parseFunction(f parseFunction, canAssign bool) error {
 		return nil
 	case parseFunctionVariable:
 		return c.variable(canAssign)
+	case parseFunctionAnd:
+		return c.and()
+	case parseFunctionOr:
+		return c.or()
 	default:
 		return &Error{ErrMissingExpr, c.previous}
 	}
@@ -285,6 +340,141 @@ func (c *compiler) printStatement() error {
 	return nil
 }
 
+func (c *compiler) ifStatement() error {
+	var err error
+	if err = c.consume(scanner.TokenLeftParen, ErrIfLeftParen); err != nil {
+		return err
+	}
+	if err = c.expression(); err != nil {
+		return err
+	}
+	if err = c.consume(scanner.TokenRightParen, ErrIfRightParen); err != nil {
+		return err
+	}
+	thenJump := c.emitJump(OperationJumpIfFalse)
+	c.emitOperation(OperationPop)
+	if err = c.statement(); err != nil {
+		return err
+	}
+	elseJump := c.emitJump(OperationJump)
+	if err = c.patchJump(thenJump); err != nil {
+		return err
+	}
+	c.emitOperation(OperationPop)
+	if c.check(scanner.TokenElse) {
+		if err = c.advance(); err != nil {
+			return err
+		}
+		if err = c.statement(); err != nil {
+			return err
+		}
+	}
+	return c.patchJump(elseJump)
+}
+
+func (c *compiler) whileStatement() error {
+	loopStart := len(c.chunk.Code)
+	var err error
+	if err = c.consume(scanner.TokenLeftParen, ErrWhileLeftParen); err != nil {
+		return err
+	}
+	if err = c.expression(); err != nil {
+		return err
+	}
+	if err = c.consume(scanner.TokenRightParen, ErrWhileRightParen); err != nil {
+		return err
+	}
+	exitJump := c.emitJump(OperationJumpIfFalse)
+	c.emitOperation(OperationPop)
+	if err = c.statement(); err != nil {
+		return err
+	}
+	if err = c.emitLoop(loopStart); err != nil {
+		return err
+	}
+	if err = c.patchJump(exitJump); err != nil {
+		return err
+	}
+	c.emitOperation(OperationPop)
+	return nil
+}
+
+func (c *compiler) forStatement() error {
+	c.beginScope()
+	var err error
+	if err = c.consume(scanner.TokenLeftParen, ErrForLeftParen); err != nil {
+		return err
+	}
+	if c.check(scanner.TokenSemicolon) {
+		if err = c.advance(); err != nil {
+			return err
+		}
+	} else if c.check(scanner.TokenVar) {
+		if err = c.advance(); err != nil {
+			return err
+		}
+		if err = c.varDeclaration(); err != nil {
+			return err
+		}
+	} else {
+		if err = c.expressionStatement(); err != nil {
+			return err
+		}
+	}
+	loopStart := len(c.chunk.Code)
+	exitJump := -1
+	if c.check(scanner.TokenSemicolon) {
+		if err = c.advance(); err != nil {
+			return err
+		}
+	} else {
+		if err = c.expression(); err != nil {
+			return err
+		}
+		if err = c.consume(scanner.TokenSemicolon, ErrForConditionSemicolon); err != nil {
+			return err
+		}
+		exitJump = c.emitJump(OperationJumpIfFalse)
+		c.emitOperation(OperationPop)
+	}
+	if c.check(scanner.TokenRightParen) {
+		if err = c.advance(); err != nil {
+			return err
+		}
+	} else {
+		bodyJump := c.emitJump(OperationJump)
+		incrementStart := len(c.chunk.Code)
+		if err = c.expression(); err != nil {
+			return err
+		}
+		c.emitOperation(OperationPop)
+		if err = c.consume(scanner.TokenRightParen, ErrForRightParen); err != nil {
+			return err
+		}
+		if err = c.emitLoop(loopStart); err != nil {
+			return err
+		}
+		loopStart = incrementStart
+		if err = c.patchJump(bodyJump); err != nil {
+			return err
+		}
+	}
+	if err = c.statement(); err != nil {
+		return err
+	}
+	if err = c.emitLoop(loopStart); err != nil {
+		return err
+	}
+	if exitJump != -1 {
+		if err = c.patchJump(exitJump); err != nil {
+			return err
+		}
+		c.emitOperation(OperationPop)
+	}
+	c.endScope()
+	return nil
+}
+
 func (c *compiler) block() error {
 	var err error
 	for !c.check(scanner.TokenRightBrace) && !c.check(scanner.TokenEof) {
@@ -314,6 +504,21 @@ func (c *compiler) statement() error {
 			return err
 		}
 		return c.printStatement()
+	case c.check(scanner.TokenIf):
+		if err := c.advance(); err != nil {
+			return err
+		}
+		return c.ifStatement()
+	case c.check(scanner.TokenWhile):
+		if err := c.advance(); err != nil {
+			return err
+		}
+		return c.whileStatement()
+	case c.check(scanner.TokenFor):
+		if err := c.advance(); err != nil {
+			return err
+		}
+		return c.forStatement()
 	case c.check(scanner.TokenLeftBrace):
 		if err := c.advance(); err != nil {
 			return err

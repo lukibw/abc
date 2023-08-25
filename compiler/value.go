@@ -48,7 +48,7 @@ func (v Value) IsString() bool {
 }
 
 func (v Value) IsFalsey() bool {
-	return v.IsNil() || (v.IsBoolean() && !v.IsBoolean())
+	return v.IsNil() || (v.IsBoolean() && !v.AsBoolean())
 }
 
 func (v Value) AsBoolean() bool {
