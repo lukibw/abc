@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"log"
 	"os"
 
@@ -11,11 +10,15 @@ import (
 )
 
 func main() {
+	debug, err := os.Create("main.log")
+	if err != nil {
+		log.Fatalln(err)
+	}
 	content, err := os.ReadFile("main.abc")
 	if err != nil {
 		log.Fatalln(err)
 	}
-	vm, err := vm.New(compiler.New(scanner.New(bytes.Runes(content))))
+	vm, err := vm.New(compiler.New(scanner.New(content)), log.New(debug, "", 0))
 	if err != nil {
 		log.Fatalln(err)
 	}

@@ -4,12 +4,12 @@ type Scanner interface {
 	Token() (*Token, error)
 }
 
-func New(source []rune) Scanner {
+func New(source []byte) Scanner {
 	return &scanner{source, 0, 0, 1}
 }
 
 type scanner struct {
-	source  []rune
+	source  []byte
 	start   int
 	current int
 	line    int
@@ -27,27 +27,27 @@ func (s *scanner) isAtEnd() bool {
 	return s.current == len(s.source)
 }
 
-func (s *scanner) peek() rune {
+func (s *scanner) peek() byte {
 	if s.isAtEnd() {
 		return 0
 	}
 	return s.source[s.current]
 }
 
-func (s *scanner) peekNext() rune {
+func (s *scanner) peekNext() byte {
 	if s.current > len(s.source)-2 {
 		return 0
 	}
 	return s.source[s.current+1]
 }
 
-func (s *scanner) advance() rune {
+func (s *scanner) advance() byte {
 	s.current++
 	return s.source[s.current-1]
 }
 
-func (s *scanner) match(r rune) bool {
-	if s.isAtEnd() || s.peek() != r {
+func (s *scanner) match(b byte) bool {
+	if s.isAtEnd() || s.peek() != b {
 		return false
 	}
 	s.current++
@@ -90,8 +90,8 @@ func (s *scanner) string() (*Token, error) {
 	return s.newToken(TokenString), nil
 }
 
-func isDigit(r rune) bool {
-	return r >= '0' && r <= '9'
+func isDigit(b byte) bool {
+	return b >= '0' && b <= '9'
 }
 
 func (s *scanner) number() (*Token, error) {
@@ -126,8 +126,8 @@ var keywords = map[string]TokenKind{
 	"true":   TokenTrue,
 }
 
-func isAlpha(r rune) bool {
-	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_'
+func isAlpha(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_'
 }
 
 func (s *scanner) identifier() (*Token, error) {
